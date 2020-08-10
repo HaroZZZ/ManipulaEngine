@@ -1,0 +1,12 @@
+﻿  Camera.cpp
+  d3dApp.cpp
+  d3dUtil.cpp
+  DDSTextureLoader.cpp
+  FrameResource.cpp
+  GameProgress.cpp
+  GameTimer.cpp
+  GeometryGenerator.cpp
+  MathHelper.cpp
+  main.cpp
+  Generating Code...
+  ManipulaEngine.vcxproj -> G:\ManipulaEngine\x64\Debug\ManipulaEngine.exe
