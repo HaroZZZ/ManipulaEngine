@@ -202,16 +202,16 @@ void GameProgress::OnKeyboardInput(const GameTimer& gt)
 		mSunPhi += 1.f * dt;
 
 	if (GetAsyncKeyState(0x57) & 0x8000) {//w
-		inputPos.z += 1.f * dt;
+		inputPos.z += 5.f * dt;
 	}
 	if (GetAsyncKeyState(0x41) & 0x8000) {//a
-		inputPos.x -= 1.f * dt;
+		inputPos.x -= 5.f * dt;
 	}
 	if (GetAsyncKeyState(0x53) & 0x8000) {//s
-		inputPos.z -= 1.f * dt;
+		inputPos.z -= 5.f * dt;
 	}
 	if (GetAsyncKeyState(0x44) & 0x8000) {//d
-		inputPos.x += 1.f * dt;
+		inputPos.x += 5.f * dt;
 	}
 	mSunPhi = MathHelper::Clamp(mSunPhi, 0.1f, XM_PIDIV4);
 }
@@ -568,12 +568,10 @@ void GameProgress::BuildBoxGeometry()
 	GeometryGenerator geoGen;
 	GeometryGenerator::MeshData box = geoGen.CreateSphere(1.0f, 20, 20);
 
-
 	SubmeshGeometry boxSubmesh;
 	boxSubmesh.IndexCount = (UINT)box.Indices32.size();
 	boxSubmesh.StartIndexLocation = 0;
 	boxSubmesh.BaseVertexLocation = 0;
-
 
 	std::vector<Vertex> vertices(box.Vertices.size());
 
@@ -610,7 +608,13 @@ void GameProgress::BuildBoxGeometry()
 
 	mBoxGeo->DrawArgs["box"] = boxSubmesh;
 
+
 	mGeometries["boxGeo"] = std::move(mBoxGeo);
+}
+
+void GameProgress::BuildShpere()
+{
+
 }
 
 void GameProgress::BuildRoomGeometry()
@@ -808,59 +812,58 @@ void GameProgress::BuildMaterials()
 
 void GameProgress::BuildRenderItems()
 {
-	auto boxRitem = std::make_unique<RenderItem>();
-	XMStoreFloat4x4(&boxRitem->World, XMMatrixTranslation(0.0f, 2.0f, -5.0f));
+	auto sphereRitem1 = std::make_unique<RenderItem>();
+	XMStoreFloat4x4(&sphereRitem1->World, XMMatrixTranslation(-10.0f, 5.0f, 10.0f));
 	//boxRitem->World = MathHelper::Identity4x4();
-	boxRitem->ObjCBIndex = 0;
-	boxRitem->Mat = mMaterials["woodCrate"].get();
-	boxRitem->Geo = mGeometries["boxGeo"].get();
-	boxRitem->PrimitiveType = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
-	boxRitem->IndexCount = boxRitem->Geo->DrawArgs["box"].IndexCount;
-	boxRitem->StartIndexLocation = boxRitem->Geo->DrawArgs["box"].StartIndexLocation;
-	boxRitem->BaseVertexLocation = boxRitem->Geo->DrawArgs["box"].BaseVertexLocation;
-	mRitemLayer[(int)RenderLayer::Alpha].push_back(boxRitem.get());
+	sphereRitem1->ObjCBIndex = 0;
+	//boxRitem->Mat = mMaterials["woodCrate"].get();
+	sphereRitem1->Geo = mGeometries["boxGeo"].get();
+	sphereRitem1->PrimitiveType = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+	sphereRitem1->IndexCount = sphereRitem1->Geo->DrawArgs["box"].IndexCount;
+	sphereRitem1->StartIndexLocation = sphereRitem1->Geo->DrawArgs["box"].StartIndexLocation;
+	sphereRitem1->BaseVertexLocation = sphereRitem1->Geo->DrawArgs["box"].BaseVertexLocation;
+	mRitemLayer[(int)RenderLayer::Opaque].push_back(sphereRitem1.get());
 
-	auto floorRitem = std::make_unique<RenderItem>();
-	floorRitem->World = MathHelper::Identity4x4();
-	floorRitem->TexTransform = MathHelper::Identity4x4();
-	floorRitem->ObjCBIndex = 1;
-	floorRitem->Mat = mMaterials["checkertile"].get();
-	floorRitem->Geo = mGeometries["roomGeo"].get();
-	floorRitem->PrimitiveType = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
-	floorRitem->IndexCount = floorRitem->Geo->DrawArgs["floor"].IndexCount;
-	floorRitem->StartIndexLocation = floorRitem->Geo->DrawArgs["floor"].StartIndexLocation;
-	floorRitem->BaseVertexLocation = floorRitem->Geo->DrawArgs["floor"].BaseVertexLocation;
-	mRitemLayer[(int)RenderLayer::Opaque].push_back(floorRitem.get());
+	auto sphereRitem2 = std::make_unique<RenderItem>();
+	XMStoreFloat4x4(&sphereRitem2->World, XMMatrixTranslation(-5.0f, 5.0f, 10.0f));
+	//boxRitem->World = MathHelper::Identity4x4();
+	sphereRitem2->ObjCBIndex = 1;
+	//boxRitem->Mat = mMaterials["woodCrate"].get();
+	sphereRitem2->Geo = mGeometries["boxGeo"].get();
+	sphereRitem2->PrimitiveType = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+	sphereRitem2->IndexCount = sphereRitem2->Geo->DrawArgs["box"].IndexCount;
+	sphereRitem2->StartIndexLocation = sphereRitem2->Geo->DrawArgs["box"].StartIndexLocation;
+	sphereRitem2->BaseVertexLocation = sphereRitem2->Geo->DrawArgs["box"].BaseVertexLocation;
+	mRitemLayer[(int)RenderLayer::Opaque].push_back(sphereRitem2.get());
 
-	auto wallsRitem = std::make_unique<RenderItem>();
-	wallsRitem->World = MathHelper::Identity4x4();
-	wallsRitem->TexTransform = MathHelper::Identity4x4();
-	wallsRitem->ObjCBIndex = 2;
-	wallsRitem->Mat = mMaterials["bricks"].get();
-	wallsRitem->Geo = mGeometries["roomGeo"].get();
-	wallsRitem->PrimitiveType = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
-	wallsRitem->IndexCount = wallsRitem->Geo->DrawArgs["wall"].IndexCount;
-	wallsRitem->StartIndexLocation = wallsRitem->Geo->DrawArgs["wall"].StartIndexLocation;
-	wallsRitem->BaseVertexLocation = wallsRitem->Geo->DrawArgs["wall"].BaseVertexLocation;
-	mRitemLayer[(int)RenderLayer::Opaque].push_back(wallsRitem.get());
+	auto sphereRitem3 = std::make_unique<RenderItem>();
+	XMStoreFloat4x4(&sphereRitem3->World, XMMatrixTranslation(5.0f, 5.0f, 10.0f));
+	//boxRitem->World = MathHelper::Identity4x4();
+	sphereRitem3->ObjCBIndex = 2;
+	//boxRitem->Mat = mMaterials["woodCrate"].get();
+	sphereRitem3->Geo = mGeometries["boxGeo"].get();
+	sphereRitem3->PrimitiveType = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+	sphereRitem3->IndexCount = sphereRitem3->Geo->DrawArgs["box"].IndexCount;
+	sphereRitem3->StartIndexLocation = sphereRitem3->Geo->DrawArgs["box"].StartIndexLocation;
+	sphereRitem3->BaseVertexLocation = sphereRitem3->Geo->DrawArgs["box"].BaseVertexLocation;
+	mRitemLayer[(int)RenderLayer::Opaque].push_back(sphereRitem3.get());
 
-	auto mirrorRitem = std::make_unique<RenderItem>();
-	mirrorRitem->World = MathHelper::Identity4x4();
-	mirrorRitem->TexTransform = MathHelper::Identity4x4();
-	mirrorRitem->ObjCBIndex = 5;
-	mirrorRitem->Mat = mMaterials["icemirror"].get();
-	mirrorRitem->Geo = mGeometries["roomGeo"].get();
-	mirrorRitem->PrimitiveType = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
-	mirrorRitem->IndexCount = mirrorRitem->Geo->DrawArgs["mirror"].IndexCount;
-	mirrorRitem->StartIndexLocation = mirrorRitem->Geo->DrawArgs["mirror"].StartIndexLocation;
-	mirrorRitem->BaseVertexLocation = mirrorRitem->Geo->DrawArgs["mirror"].BaseVertexLocation;
-	mRitemLayer[(int)RenderLayer::Mirrors].push_back(mirrorRitem.get());
-	mRitemLayer[(int)RenderLayer::Transparent].push_back(mirrorRitem.get());
+	auto sphereRitem4 = std::make_unique<RenderItem>();
+	XMStoreFloat4x4(&sphereRitem4->World, XMMatrixTranslation(10.0f, 5.0f, 10.0f));
+	//boxRitem->World = MathHelper::Identity4x4();
+	sphereRitem4->ObjCBIndex = 3;
+	//boxRitem->Mat = mMaterials["woodCrate"].get();
+	sphereRitem4->Geo = mGeometries["boxGeo"].get();
+	sphereRitem4->PrimitiveType = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+	sphereRitem4->IndexCount = sphereRitem4->Geo->DrawArgs["box"].IndexCount;
+	sphereRitem4->StartIndexLocation = sphereRitem4->Geo->DrawArgs["box"].StartIndexLocation;
+	sphereRitem4->BaseVertexLocation = sphereRitem4->Geo->DrawArgs["box"].BaseVertexLocation;
+	mRitemLayer[(int)RenderLayer::Opaque].push_back(sphereRitem4.get());
 
-	mAllRitems.push_back(std::move(boxRitem));
-	mAllRitems.push_back(std::move(floorRitem));
-	mAllRitems.push_back(std::move(wallsRitem));
-	mAllRitems.push_back(std::move(mirrorRitem));
+	mAllRitems.push_back(std::move(sphereRitem1));
+	mAllRitems.push_back(std::move(sphereRitem2));
+	mAllRitems.push_back(std::move(sphereRitem3));
+	mAllRitems.push_back(std::move(sphereRitem4));
 }
 
 void GameProgress::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, const std::vector<RenderItem*>& ritems)
@@ -878,14 +881,20 @@ void GameProgress::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, const std
 		cmdList->IASetIndexBuffer(&ri->Geo->IndexBufferView());
 		cmdList->IASetPrimitiveTopology(ri->PrimitiveType);
 
-		CD3DX12_GPU_DESCRIPTOR_HANDLE tex(mSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
-		tex.Offset(ri->Mat->DiffuseSrvHeapIndex, mCbvSrvDescriptorSize);
+		if (ri->Mat) {
+			CD3DX12_GPU_DESCRIPTOR_HANDLE tex(mSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
+			tex.Offset(ri->Mat->DiffuseSrvHeapIndex, mCbvSrvDescriptorSize);
 
-		if (ri->Mat->NormalSrvHeapIndex > -1) {
-			CD3DX12_GPU_DESCRIPTOR_HANDLE normal(mSrvNormalDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
-			normal.Offset(ri->Mat->NormalSrvHeapIndex, mCbvSrvDescriptorSize);
-			cmdList->SetGraphicsRootDescriptorTable(4, normal);
+			if (ri->Mat->NormalSrvHeapIndex > -1) {
+				CD3DX12_GPU_DESCRIPTOR_HANDLE normal(mSrvNormalDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
+				normal.Offset(ri->Mat->NormalSrvHeapIndex, mCbvSrvDescriptorSize);
+				cmdList->SetGraphicsRootDescriptorTable(4, normal);
+			}
+			cmdList->SetGraphicsRootDescriptorTable(0, tex);
+			D3D12_GPU_VIRTUAL_ADDRESS matCBAddress = matCB->GetGPUVirtualAddress() + ri->Mat->MatCBIndex * matCBByteSize;
+			cmdList->SetGraphicsRootConstantBufferView(3, matCBAddress);
 		}
+
 		//tex.Offset(ri->Mat->DiffuseSrvHeapIndex, mCbvSrvDescriptorSize);
 		/*D3D12_GPU_VIRTUAL_ADDRESS objCBAddress = objectCB->GetGPUVirtualAddress() + ri->ObjCBIndex*objCBByteSize;*/
 		//°ó¶¨ÃèÊö·û¶Ñ
@@ -899,13 +908,10 @@ void GameProgress::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, const std
 
 		//cmdList->SetGraphicsRootConstantBufferView(1, objCBAddress);
 
-		D3D12_GPU_VIRTUAL_ADDRESS objCBAddress = objectCB->GetGPUVirtualAddress() + ri->ObjCBIndex * objCBByteSize;
-		D3D12_GPU_VIRTUAL_ADDRESS matCBAddress = matCB->GetGPUVirtualAddress() + ri->Mat->MatCBIndex * matCBByteSize;
+		//D3D12_GPU_VIRTUAL_ADDRESS objCBAddress = objectCB->GetGPUVirtualAddress() + ri->ObjCBIndex * objCBByteSize;
 
-		cmdList->SetGraphicsRootDescriptorTable(0, tex);
-		cmdList->SetGraphicsRootConstantBufferView(1, objCBAddress);
-		cmdList->SetGraphicsRootConstantBufferView(3, matCBAddress);
-
+		//cmdList->SetGraphicsRootConstantBufferView(1, objCBAddress);
+	
 		cmdList->DrawIndexedInstanced(ri->IndexCount, 1, ri->StartIndexLocation, ri->BaseVertexLocation, 0);
 	}
 }

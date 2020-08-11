@@ -48,6 +48,7 @@ private:
 	void BuileSourceBuffers();
 	void BuildShadersAndInputLayout();
 	void BuildBoxGeometry();
+	void BuildShpere();
 	void BuildRoomGeometry();
 	void BuildPSOs();
 	void BuildFrameResources();
