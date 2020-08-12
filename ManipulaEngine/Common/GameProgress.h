@@ -93,6 +93,7 @@ private:
 	PassConstants mMainPassCB;
 
 	UINT mPassCbvOffset = 0;
+	UINT mTexSrvOffset = 0;
 
 	XMFLOAT3 mEyePos = { 0.0f, 0.0f, 0.0f };
 	XMFLOAT3 inputPos = { 0.0f, 0.0f, 0.0f };

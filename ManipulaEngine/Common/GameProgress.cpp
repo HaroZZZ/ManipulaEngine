@@ -29,7 +29,7 @@ bool GameProgress::Initialize()
 	BuildRenderItems();
 	BuildFrameResources();
 	BuildDescriptorHeaps();
-	//BuildConstantBuffers();
+	BuildConstantBuffers();
 	BuileSourceBuffers();
 	BuildShadersAndInputLayout();
 
@@ -101,11 +101,13 @@ void GameProgress::Draw(const GameTimer& gt)
 	//绑定根签名
 	mCommandList->SetGraphicsRootSignature(mRootSignature.Get());
 
-	ID3D12DescriptorHeap* SrvdescriptorHeaps[] = { mSrvDescriptorHeap.Get() };
-	mCommandList->SetDescriptorHeaps(_countof(SrvdescriptorHeaps), SrvdescriptorHeaps);
+	ID3D12DescriptorHeap* descriptorHeaps[] = { mCbvDescriptorHeap.Get()};
+	mCommandList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);
 
-	auto passCB = mCurrFrameResource->PassCB->Resource();
-	mCommandList->SetGraphicsRootConstantBufferView(2, passCB->GetGPUVirtualAddress());
+	int passCbvIndex = mPassCbvOffset + mCurrFrameResourceIndex;
+	auto passCbvHandle = CD3DX12_GPU_DESCRIPTOR_HANDLE(mCbvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
+	passCbvHandle.Offset(passCbvIndex, mCbvSrvUavDescriptorSize);
+	mCommandList->SetGraphicsRootDescriptorTable(2, passCbvHandle);
 
 	//绘制item
 	DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::Opaque]);
@@ -241,13 +243,16 @@ void GameProgress::UpdateObjectCBs(const GameTimer& gt)
 	auto currObjectCB = mCurrFrameResource->ObjectCB.get();
 
 	for (auto& e : mAllRitems) {
-		XMMATRIX world = XMLoadFloat4x4(&e->World);
-		ObjectConstants objConstants;
-		XMStoreFloat4x4(&objConstants.World, XMMatrixTranspose(world));
-		currObjectCB->CopyData(e->ObjCBIndex, objConstants);
+		if (e->NumFramesDirty > 0) {
+			XMMATRIX world = XMLoadFloat4x4(&e->World);
 
-		// 更新下一个FrameResource
-		e->NumFramesDirty--;
+			ObjectConstants objConstants;
+			XMStoreFloat4x4(&objConstants.World, XMMatrixTranspose(world));
+			currObjectCB->CopyData(e->ObjCBIndex, objConstants);
+
+			// 更新下一个FrameResource
+			e->NumFramesDirty--;
+		}
 	}
 }
 
@@ -370,8 +375,9 @@ void GameProgress::BuildRootSignature()
 	texTable[1].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 1);
 
 	CD3DX12_DESCRIPTOR_RANGE cbvTable1;
-	CD3DX12_DESCRIPTOR_RANGE cbvTable2;
 	cbvTable1.Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 0);
+
+	CD3DX12_DESCRIPTOR_RANGE cbvTable2;
 	//cbvTable1[1].Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 1);
 	cbvTable2.Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 1);
 
@@ -379,8 +385,8 @@ void GameProgress::BuildRootSignature()
 	CD3DX12_ROOT_PARAMETER slotRootParameter[5];
 
 	slotRootParameter[0].InitAsDescriptorTable(1, &texTable[0], D3D12_SHADER_VISIBILITY_PIXEL);
-	slotRootParameter[1].InitAsConstantBufferView(0);//objconstant
-	slotRootParameter[2].InitAsConstantBufferView(1);//pass
+	slotRootParameter[1].InitAsDescriptorTable(1, &cbvTable1); //objconstant
+	slotRootParameter[2].InitAsDescriptorTable(1, &cbvTable2);//pass
 	slotRootParameter[3].InitAsConstantBufferView(2);//mat
 	slotRootParameter[4].InitAsDescriptorTable(1, &texTable[1], D3D12_SHADER_VISIBILITY_PIXEL);
 
@@ -427,10 +433,11 @@ void GameProgress::BuildDescriptorHeaps()
 
 	// Need a CBV descriptor for each object for each frame resource,
 	// +1 for the perPass CBV for each frame resource.
-	UINT numDescriptors = (objCount + 1) * gNumFrameResources;
+	UINT numDescriptors = (objCount + 1) * gNumFrameResources + objCount;
 
 	// Save an offset to the start of the pass CBVs.  These are the last 3 descriptors.
 	mPassCbvOffset = objCount * gNumFrameResources;
+	mTexSrvOffset = (objCount + 1) * gNumFrameResources;
 
 	D3D12_DESCRIPTOR_HEAP_DESC cbvHeapDesc;
 	cbvHeapDesc.NumDescriptors = numDescriptors;
@@ -442,14 +449,14 @@ void GameProgress::BuildDescriptorHeaps()
 
 
 	//SRV描述符堆
-	D3D12_DESCRIPTOR_HEAP_DESC srvHeapDesc = {};
-	srvHeapDesc.NumDescriptors = 4;
-	srvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-	srvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-	ThrowIfFailed(md3dDevice->CreateDescriptorHeap(&srvHeapDesc, IID_PPV_ARGS(&mSrvDescriptorHeap)));
+	//D3D12_DESCRIPTOR_HEAP_DESC srvHeapDesc = {};
+	//srvHeapDesc.NumDescriptors = 4;
+	//srvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+	//srvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+	//ThrowIfFailed(md3dDevice->CreateDescriptorHeap(&srvHeapDesc, IID_PPV_ARGS(&mSrvDescriptorHeap)));
 
-	srvHeapDesc.NumDescriptors = 1;
-	ThrowIfFailed(md3dDevice->CreateDescriptorHeap(&srvHeapDesc, IID_PPV_ARGS(&mSrvNormalDescriptorHeap)));
+	//srvHeapDesc.NumDescriptors = 1;
+	//ThrowIfFailed(md3dDevice->CreateDescriptorHeap(&srvHeapDesc, IID_PPV_ARGS(&mSrvNormalDescriptorHeap)));
 }
 
 void GameProgress::BuildConstantBuffers()
@@ -512,8 +519,9 @@ void GameProgress::BuileSourceBuffers()
 	auto iceTex = mTextures["iceTex"]->Resource;
 	auto BoxNTex = mTextures["BoxNTex"]->Resource;
 
-	CD3DX12_CPU_DESCRIPTOR_HANDLE hDescriptor(mSrvDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
+	CD3DX12_CPU_DESCRIPTOR_HANDLE hDescriptor(mCbvDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
 
+	hDescriptor.Offset(mTexSrvOffset, mCbvSrvDescriptorSize);
 	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 	srvDesc.Format = BoxTex->GetDesc().Format;
@@ -535,8 +543,8 @@ void GameProgress::BuileSourceBuffers()
 	md3dDevice->CreateShaderResourceView(iceTex.Get(), &srvDesc, hDescriptor);
 
 	//加载法线贴图
-	srvDesc.Format = BoxNTex->GetDesc().Format;
-	md3dDevice->CreateShaderResourceView(BoxNTex.Get(), &srvDesc, mSrvNormalDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
+// 	srvDesc.Format = BoxNTex->GetDesc().Format;
+// 	md3dDevice->CreateShaderResourceView(BoxNTex.Get(), &srvDesc, mSrvNormalDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
 }
 
 void GameProgress::BuildShadersAndInputLayout()
@@ -881,8 +889,15 @@ void GameProgress::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, const std
 		cmdList->IASetIndexBuffer(&ri->Geo->IndexBufferView());
 		cmdList->IASetPrimitiveTopology(ri->PrimitiveType);
 
+		/*
 		if (ri->Mat) {
-			CD3DX12_GPU_DESCRIPTOR_HANDLE tex(mSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
+			//ID3D12DescriptorHeap* SrvdescriptorHeaps[] = { mSrvDescriptorHeap.Get() };
+			//cmdList->SetDescriptorHeaps(_countof(SrvdescriptorHeaps), SrvdescriptorHeaps);
+
+			//auto passCB = mCurrFrameResource->PassCB->Resource();
+			//mCommandList->SetGraphicsRootConstantBufferView(2, passCB->GetGPUVirtualAddress());
+			
+			CD3DX12_GPU_DESCRIPTOR_HANDLE tex(mCbvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
 			tex.Offset(ri->Mat->DiffuseSrvHeapIndex, mCbvSrvDescriptorSize);
 
 			if (ri->Mat->NormalSrvHeapIndex > -1) {
@@ -891,20 +906,22 @@ void GameProgress::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, const std
 				cmdList->SetGraphicsRootDescriptorTable(4, normal);
 			}
 			cmdList->SetGraphicsRootDescriptorTable(0, tex);
+
 			D3D12_GPU_VIRTUAL_ADDRESS matCBAddress = matCB->GetGPUVirtualAddress() + ri->Mat->MatCBIndex * matCBByteSize;
 			cmdList->SetGraphicsRootConstantBufferView(3, matCBAddress);
 		}
-
+		*/
 		//tex.Offset(ri->Mat->DiffuseSrvHeapIndex, mCbvSrvDescriptorSize);
 		/*D3D12_GPU_VIRTUAL_ADDRESS objCBAddress = objectCB->GetGPUVirtualAddress() + ri->ObjCBIndex*objCBByteSize;*/
-		//绑定描述符堆
-		/*ID3D12DescriptorHeap* CbvdescriptorHeaps[] = { mCbvDescriptorHeap.Get() };
-		mCommandList->SetDescriptorHeaps(_countof(CbvdescriptorHeaps), CbvdescriptorHeaps);*/
 
-		//CD3DX12_GPU_DESCRIPTOR_HANDLE obj(mCbvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
-		//UINT cbvIndex = mCurrFrameResourceIndex * (UINT)mAllRitems.size() + ri->ObjCBIndex;
-		//obj.Offset(cbvIndex, mCbvSrvUavDescriptorSize);
-		//cmdList->SetGraphicsRootDescriptorTable(1, obj);
+		CD3DX12_GPU_DESCRIPTOR_HANDLE tex(mCbvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
+		tex.Offset(mTexSrvOffset + i, mCbvSrvDescriptorSize);
+		cmdList->SetGraphicsRootDescriptorTable(0, tex);
+
+		CD3DX12_GPU_DESCRIPTOR_HANDLE obj(mCbvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
+		UINT cbvIndex = mCurrFrameResourceIndex * (UINT)mAllRitems.size() + ri->ObjCBIndex;
+		obj.Offset(cbvIndex, mCbvSrvUavDescriptorSize);
+		cmdList->SetGraphicsRootDescriptorTable(1, obj);
 
 		//cmdList->SetGraphicsRootConstantBufferView(1, objCBAddress);
 
