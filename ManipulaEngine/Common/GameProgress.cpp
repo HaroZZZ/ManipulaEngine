@@ -107,7 +107,7 @@ void GameProgress::Draw(const GameTimer& gt)
 	int passCbvIndex = mPassCbvOffset + mCurrFrameResourceIndex;
 	auto passCbvHandle = CD3DX12_GPU_DESCRIPTOR_HANDLE(mCbvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
 	passCbvHandle.Offset(passCbvIndex, mCbvSrvUavDescriptorSize);
-	mCommandList->SetGraphicsRootDescriptorTable(2, passCbvHandle);
+	mCommandList->SetGraphicsRootDescriptorTable(1, passCbvHandle);
 
 	//绘制item
 	DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::Opaque]);
@@ -231,8 +231,10 @@ void GameProgress::UpdateCamera(const GameTimer& gt)
 
 	// Build the view matrix.
 	XMVECTOR pos = XMVectorSet(mEyePos.x, mEyePos.y, mEyePos.z, 1.0f);
-	XMVECTOR target = XMVectorZero();
+	//XMVECTOR target = XMVectorZero();
+	XMVECTOR target = pos + LookDir * 500.0f;
 	XMVECTOR up = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
+
 
 	XMMATRIX view = XMMatrixLookAtLH(pos, target, up);
 	XMStoreFloat4x4(&mView, view);
@@ -269,9 +271,11 @@ void GameProgress::UpdateMaterialCBs(const GameTimer& gt)
 			XMMATRIX matTransform = XMLoadFloat4x4(&mat->MatTransform);
 
 			MaterialConstants matConstants;
+			matConstants.BaseColor = mat->BaseColor;
 			matConstants.DiffuseAlbedo = mat->DiffuseAlbedo;
 			matConstants.FresnelR0 = mat->FresnelR0;
 			matConstants.Roughness = mat->Roughness;
+
 			XMStoreFloat4x4(&matConstants.MatTransform, XMMatrixTranspose(matTransform));
 
 			currMaterialCB->CopyData(mat->MatCBIndex, matConstants);
@@ -325,14 +329,14 @@ void GameProgress::LoadTextures()
 	auto boxTex = std::make_unique<Texture>();
 	boxTex->Name = "BoxTex";
 	
-	boxTex->Filename = L"../Textures/WireFence.dds";
+	boxTex->Filename = L"../Textures/bricks.dds";
 	ThrowIfFailed(DirectX::CreateDDSTextureFromFile12(md3dDevice.Get(),
 		mCommandList.Get(), boxTex->Filename.c_str(),
 		boxTex->Resource, boxTex->UploadHeap));
 
 	auto boxNTex = std::make_unique<Texture>();
 	boxNTex->Name = "BoxNTex";
-	boxNTex->Filename = L"../Textures/bricks_nmap.dds";
+	boxNTex->Filename = L"../Textures/stone.dds";
 	ThrowIfFailed(DirectX::CreateDDSTextureFromFile12(md3dDevice.Get(),
 		mCommandList.Get(), boxNTex->Filename.c_str(),
 		boxNTex->Resource, boxNTex->UploadHeap));
@@ -347,14 +351,14 @@ void GameProgress::LoadTextures()
 
 	auto checkboardTex = std::make_unique<Texture>();
 	checkboardTex->Name = "checkboardTex";
-	checkboardTex->Filename = L"../Textures/checkboard.dds";
+	checkboardTex->Filename = L"../Textures/tile.dds";
 	ThrowIfFailed(DirectX::CreateDDSTextureFromFile12(md3dDevice.Get(),
 		mCommandList.Get(), checkboardTex->Filename.c_str(),
 		checkboardTex->Resource, checkboardTex->UploadHeap));
 
 	auto iceTex = std::make_unique<Texture>();
 	iceTex->Name = "iceTex";
-	iceTex->Filename = L"../Textures/ice.dds";
+	iceTex->Filename = L"../Textures/bricks2.dds";
 	ThrowIfFailed(DirectX::CreateDDSTextureFromFile12(md3dDevice.Get(),
 		mCommandList.Get(), iceTex->Filename.c_str(),
 		iceTex->Resource, iceTex->UploadHeap));
@@ -365,6 +369,7 @@ void GameProgress::LoadTextures()
 	mTextures[bricksTex->Name] = std::move(bricksTex);
 	mTextures[checkboardTex->Name] = std::move(checkboardTex);
 	mTextures[iceTex->Name] = std::move(iceTex);
+
 }
 
 void GameProgress::BuildRootSignature()
@@ -374,21 +379,21 @@ void GameProgress::BuildRootSignature()
 	texTable[0].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
 	texTable[1].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 1);
 
-	CD3DX12_DESCRIPTOR_RANGE cbvTable1;
-	cbvTable1.Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 0);
+	CD3DX12_DESCRIPTOR_RANGE cbvTable[3];
 
-	CD3DX12_DESCRIPTOR_RANGE cbvTable2;
-	//cbvTable1[1].Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 1);
-	cbvTable2.Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 1);
+	cbvTable[0].Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 0);
+	cbvTable[1].Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 1);
+	cbvTable[2].Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 2);
+
 
 	//创建根参数，保存描述符表
 	CD3DX12_ROOT_PARAMETER slotRootParameter[5];
 
-	slotRootParameter[0].InitAsDescriptorTable(1, &texTable[0], D3D12_SHADER_VISIBILITY_PIXEL);
-	slotRootParameter[1].InitAsDescriptorTable(1, &cbvTable1); //objconstant
-	slotRootParameter[2].InitAsDescriptorTable(1, &cbvTable2);//pass
-	slotRootParameter[3].InitAsConstantBufferView(2);//mat
-	slotRootParameter[4].InitAsDescriptorTable(1, &texTable[1], D3D12_SHADER_VISIBILITY_PIXEL);
+	slotRootParameter[0].InitAsDescriptorTable(1, &cbvTable[0]); //objconstant
+	slotRootParameter[1].InitAsDescriptorTable(1, &cbvTable[1]);//pass
+	slotRootParameter[2].InitAsDescriptorTable(1, &cbvTable[2]);//mat
+	slotRootParameter[3].InitAsDescriptorTable(1, &texTable[0], D3D12_SHADER_VISIBILITY_PIXEL); //tex
+	slotRootParameter[4].InitAsDescriptorTable(1, &texTable[1], D3D12_SHADER_VISIBILITY_PIXEL); //normalmtex
 
 	//slotRootParameter[1].InitAsConstantBufferView(0);
 	//slotRootParameter[2].InitAsConstantBufferView(1);
@@ -430,14 +435,17 @@ void GameProgress::BuildDescriptorHeaps()
 	//ThrowIfFailed(md3dDevice->CreateDescriptorHeap(&cbvHeapDesc,
 	//	IID_PPV_ARGS(&mCbvDescriptorHeap)));
 	UINT objCount = (UINT)mAllRitems.size();
+	UINT matCount = (UINT)mMaterials.size();
 
 	// Need a CBV descriptor for each object for each frame resource,
 	// +1 for the perPass CBV for each frame resource.
-	UINT numDescriptors = (objCount + 1) * gNumFrameResources + objCount;
+	// +objCount  for the tex mat for each object
+	UINT numDescriptors = (objCount + matCount + 1) * gNumFrameResources + objCount;
 
 	// Save an offset to the start of the pass CBVs.  These are the last 3 descriptors.
-	mPassCbvOffset = objCount * gNumFrameResources;
-	mTexSrvOffset = (objCount + 1) * gNumFrameResources;
+	mPassCbvOffset = (objCount + matCount) * gNumFrameResources;
+	mTexSrvOffset = (objCount + matCount + 1) * gNumFrameResources;
+	mMatCbvOffset = objCount;
 
 	D3D12_DESCRIPTOR_HEAP_DESC cbvHeapDesc;
 	cbvHeapDesc.NumDescriptors = numDescriptors;
@@ -464,6 +472,7 @@ void GameProgress::BuildConstantBuffers()
 	UINT objCBByteSize = d3dUtil::CalcConstantBufferByteSize(sizeof(ObjectConstants));
 
 	UINT objCount = (UINT)mAllRitems.size();
+	UINT matCount = (UINT)mMaterials.size();
 
 	// Need a CBV descriptor for each object for each frame resource.
 	for (int frameIndex = 0; frameIndex < gNumFrameResources; ++frameIndex)
@@ -477,7 +486,7 @@ void GameProgress::BuildConstantBuffers()
 			cbAddress += i * objCBByteSize;
 
 			// Offset to the object cbv in the descriptor heap.
-			int heapIndex = frameIndex * objCount + i;
+			int heapIndex = frameIndex * (objCount + matCount) + i;
 			auto handle = CD3DX12_CPU_DESCRIPTOR_HANDLE(mCbvDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
 			handle.Offset(heapIndex, mCbvSrvUavDescriptorSize);
 
@@ -508,6 +517,27 @@ void GameProgress::BuildConstantBuffers()
 
 		md3dDevice->CreateConstantBufferView(&cbvDesc, handle);
 	}
+
+	UINT matCBByteSize = d3dUtil::CalcConstantBufferByteSize(sizeof(MaterialConstants));
+
+	for (int frameIndex = 0; frameIndex < gNumFrameResources; ++frameIndex) {
+		auto matCB = mFrameResources[frameIndex]->MaterialCB->Resource();
+		
+		for (int i = 0; i < matCount; ++i) {
+			D3D12_GPU_VIRTUAL_ADDRESS cbAddress = matCB->GetGPUVirtualAddress();
+
+			cbAddress += i * matCBByteSize;
+			int heapindex = frameIndex * (objCount + matCount) + objCount + i;
+			auto handle = CD3DX12_CPU_DESCRIPTOR_HANDLE(mCbvDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
+			handle.Offset(heapindex, mCbvSrvUavDescriptorSize);
+
+			D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc;
+			cbvDesc.BufferLocation = cbAddress;
+			cbvDesc.SizeInBytes = matCBByteSize;
+
+			md3dDevice->CreateConstantBufferView(&cbvDesc, handle);
+		}
+	}
 }
 
 void GameProgress::BuileSourceBuffers()
@@ -521,7 +551,7 @@ void GameProgress::BuileSourceBuffers()
 
 	CD3DX12_CPU_DESCRIPTOR_HANDLE hDescriptor(mCbvDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
 
-	hDescriptor.Offset(mTexSrvOffset, mCbvSrvDescriptorSize);
+	hDescriptor.Offset(mTexSrvOffset, mCbvSrvUavDescriptorSize);
 	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 	srvDesc.Format = BoxTex->GetDesc().Format;
@@ -530,15 +560,15 @@ void GameProgress::BuileSourceBuffers()
 	srvDesc.Texture2D.MipLevels = -1;
 	md3dDevice->CreateShaderResourceView(BoxTex.Get(), &srvDesc, hDescriptor);
 
-	hDescriptor.Offset(1, mCbvSrvDescriptorSize);
+	hDescriptor.Offset(1, mCbvSrvUavDescriptorSize);
 	srvDesc.Format = bricksTex->GetDesc().Format;
 	md3dDevice->CreateShaderResourceView(bricksTex.Get(), &srvDesc, hDescriptor);
 
-	hDescriptor.Offset(1, mCbvSrvDescriptorSize);
+	hDescriptor.Offset(1, mCbvSrvUavDescriptorSize);
 	srvDesc.Format = checkboardTex->GetDesc().Format;
 	md3dDevice->CreateShaderResourceView(checkboardTex.Get(), &srvDesc, hDescriptor);
 
-	hDescriptor.Offset(1, mCbvSrvDescriptorSize);
+	hDescriptor.Offset(1, mCbvSrvUavDescriptorSize);
 	srvDesc.Format = iceTex->GetDesc().Format;
 	md3dDevice->CreateShaderResourceView(iceTex.Get(), &srvDesc, hDescriptor);
 
@@ -779,43 +809,50 @@ void GameProgress::BuildFrameResources()
 
 void GameProgress::BuildMaterials()
 {
-	auto woodCrate = std::make_unique<Material>();
-	woodCrate->Name = "woodCrate";
-	woodCrate->MatCBIndex = 0;
-	woodCrate->DiffuseSrvHeapIndex = 0;
-	woodCrate->NormalSrvHeapIndex = 0;
-	woodCrate->DiffuseAlbedo = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
-	woodCrate->FresnelR0 = XMFLOAT3(0.05f, 0.05f, 0.05f);
-	woodCrate->Roughness = 0.2f;
+	auto red = std::make_unique<Material>();
+	red->Name = "red";
+	red->MatCBIndex = 0;
+	red->DiffuseSrvHeapIndex = 0;
+	red->NormalSrvHeapIndex = -1;
+	red->BaseColor = XMFLOAT4(1.0f, 0.0f, 0.0f, 1.0f);
+	red->DiffuseAlbedo = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
+	red->FresnelR0 = XMFLOAT3(0.05f, 0.05f, 0.05f);
+	red->Roughness = 0.2f;
 
-	auto bricks = std::make_unique<Material>();
-	bricks->Name = "bricks";
-	bricks->MatCBIndex = 1;
-	bricks->DiffuseSrvHeapIndex = 1;
-	bricks->DiffuseAlbedo = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
-	bricks->FresnelR0 = XMFLOAT3(0.05f, 0.05f, 0.05f);
-	bricks->Roughness = 0.25f;
+	auto green = std::make_unique<Material>();
+	green->Name = "green";
+	green->MatCBIndex = 1;
+	green->DiffuseSrvHeapIndex = 1;
+	green->NormalSrvHeapIndex = -1;
+	green->BaseColor = XMFLOAT4(0.0f, 1.0f, 0.0f, 1.0f);
+	green->DiffuseAlbedo = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
+	green->FresnelR0 = XMFLOAT3(0.05f, 0.05f, 0.05f);
+	green->Roughness = 0.25f;
 
-	auto checkertile = std::make_unique<Material>();
-	checkertile->Name = "checkertile";
-	checkertile->MatCBIndex = 2;
-	checkertile->DiffuseSrvHeapIndex = 2;
-	checkertile->DiffuseAlbedo = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
-	checkertile->FresnelR0 = XMFLOAT3(0.07f, 0.07f, 0.07f);
-	checkertile->Roughness = 0.3f;
+	auto blue = std::make_unique<Material>();
+	blue->Name = "blue";
+	blue->MatCBIndex = 2;
+	blue->DiffuseSrvHeapIndex = 2;
+	blue->NormalSrvHeapIndex = -1;
+	blue->BaseColor = XMFLOAT4(0.0f, 0.0f, 1.0f, 1.0f);
+	blue->DiffuseAlbedo = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
+	blue->FresnelR0 = XMFLOAT3(0.07f, 0.07f, 0.07f);
+	blue->Roughness = 0.3f;
 
-	auto icemirror = std::make_unique<Material>();
-	icemirror->Name = "icemirror";
-	icemirror->MatCBIndex = 3;
-	icemirror->DiffuseSrvHeapIndex = 3;
-	icemirror->DiffuseAlbedo = XMFLOAT4(1.0f, 1.0f, 1.0f, 0.3f);
-	icemirror->FresnelR0 = XMFLOAT3(0.1f, 0.1f, 0.1f);
-	icemirror->Roughness = 0.5f;
+	auto write = std::make_unique<Material>();
+	write->Name = "write";
+	write->MatCBIndex = 3;
+	write->DiffuseSrvHeapIndex = 3;
+	write->NormalSrvHeapIndex = -1;
+	write->BaseColor = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
+	write->DiffuseAlbedo = XMFLOAT4(1.0f, 1.0f, 1.0f, 0.3f);
+	write->FresnelR0 = XMFLOAT3(0.1f, 0.1f, 0.1f);
+	write->Roughness = 0.5f;
 
-	mMaterials["bricks"] = std::move(bricks);
-	mMaterials["checkertile"] = std::move(checkertile);
-	mMaterials["woodCrate"] = std::move(woodCrate);
-	mMaterials["icemirror"] = std::move(icemirror);
+	mMaterials["green"] = std::move(green);
+	mMaterials["blue"] = std::move(blue);
+	mMaterials["red"] = std::move(red);
+	mMaterials["write"] = std::move(write);
 }
 
 void GameProgress::BuildRenderItems()
@@ -824,7 +861,7 @@ void GameProgress::BuildRenderItems()
 	XMStoreFloat4x4(&sphereRitem1->World, XMMatrixTranslation(-10.0f, 5.0f, 10.0f));
 	//boxRitem->World = MathHelper::Identity4x4();
 	sphereRitem1->ObjCBIndex = 0;
-	//boxRitem->Mat = mMaterials["woodCrate"].get();
+	sphereRitem1->Mat = mMaterials["green"].get();
 	sphereRitem1->Geo = mGeometries["boxGeo"].get();
 	sphereRitem1->PrimitiveType = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
 	sphereRitem1->IndexCount = sphereRitem1->Geo->DrawArgs["box"].IndexCount;
@@ -836,7 +873,7 @@ void GameProgress::BuildRenderItems()
 	XMStoreFloat4x4(&sphereRitem2->World, XMMatrixTranslation(-5.0f, 5.0f, 10.0f));
 	//boxRitem->World = MathHelper::Identity4x4();
 	sphereRitem2->ObjCBIndex = 1;
-	//boxRitem->Mat = mMaterials["woodCrate"].get();
+	sphereRitem2->Mat = mMaterials["blue"].get();
 	sphereRitem2->Geo = mGeometries["boxGeo"].get();
 	sphereRitem2->PrimitiveType = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
 	sphereRitem2->IndexCount = sphereRitem2->Geo->DrawArgs["box"].IndexCount;
@@ -848,7 +885,7 @@ void GameProgress::BuildRenderItems()
 	XMStoreFloat4x4(&sphereRitem3->World, XMMatrixTranslation(5.0f, 5.0f, 10.0f));
 	//boxRitem->World = MathHelper::Identity4x4();
 	sphereRitem3->ObjCBIndex = 2;
-	//boxRitem->Mat = mMaterials["woodCrate"].get();
+	sphereRitem3->Mat = mMaterials["red"].get();
 	sphereRitem3->Geo = mGeometries["boxGeo"].get();
 	sphereRitem3->PrimitiveType = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
 	sphereRitem3->IndexCount = sphereRitem3->Geo->DrawArgs["box"].IndexCount;
@@ -860,7 +897,7 @@ void GameProgress::BuildRenderItems()
 	XMStoreFloat4x4(&sphereRitem4->World, XMMatrixTranslation(10.0f, 5.0f, 10.0f));
 	//boxRitem->World = MathHelper::Identity4x4();
 	sphereRitem4->ObjCBIndex = 3;
-	//boxRitem->Mat = mMaterials["woodCrate"].get();
+	sphereRitem4->Mat = mMaterials["write"].get();
 	sphereRitem4->Geo = mGeometries["boxGeo"].get();
 	sphereRitem4->PrimitiveType = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
 	sphereRitem4->IndexCount = sphereRitem4->Geo->DrawArgs["box"].IndexCount;
@@ -880,8 +917,9 @@ void GameProgress::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, const std
 	UINT objCBByteSize = d3dUtil::CalcConstantBufferByteSize(sizeof(ObjectConstants));
 	UINT matCBByteSize = d3dUtil::CalcConstantBufferByteSize(sizeof(MaterialConstants));
 
-	auto objectCB = mCurrFrameResource->ObjectCB->Resource();
-	auto matCB = mCurrFrameResource->MaterialCB->Resource();
+	//auto objectCB = mCurrFrameResource->ObjectCB->Resource();
+	//auto matCB = mCurrFrameResource->MaterialCB->Resource();
+
 	for (size_t i = 0; i < ritems.size(); ++i) {
 		auto ri = ritems[i];
 
@@ -889,45 +927,33 @@ void GameProgress::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, const std
 		cmdList->IASetIndexBuffer(&ri->Geo->IndexBufferView());
 		cmdList->IASetPrimitiveTopology(ri->PrimitiveType);
 
-		/*
 		if (ri->Mat) {
-			//ID3D12DescriptorHeap* SrvdescriptorHeaps[] = { mSrvDescriptorHeap.Get() };
-			//cmdList->SetDescriptorHeaps(_countof(SrvdescriptorHeaps), SrvdescriptorHeaps);
-
-			//auto passCB = mCurrFrameResource->PassCB->Resource();
-			//mCommandList->SetGraphicsRootConstantBufferView(2, passCB->GetGPUVirtualAddress());
-			
 			CD3DX12_GPU_DESCRIPTOR_HANDLE tex(mCbvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
-			tex.Offset(ri->Mat->DiffuseSrvHeapIndex, mCbvSrvDescriptorSize);
+			UINT texIndex = ri->Mat->DiffuseSrvHeapIndex + mTexSrvOffset;
+			tex.Offset(texIndex, mCbvSrvUavDescriptorSize);
+			cmdList->SetGraphicsRootDescriptorTable(3, tex);
 
-			if (ri->Mat->NormalSrvHeapIndex > -1) {
-				CD3DX12_GPU_DESCRIPTOR_HANDLE normal(mSrvNormalDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
-				normal.Offset(ri->Mat->NormalSrvHeapIndex, mCbvSrvDescriptorSize);
-				cmdList->SetGraphicsRootDescriptorTable(4, normal);
-			}
-			cmdList->SetGraphicsRootDescriptorTable(0, tex);
+			//add normal map
+			//if (ri->Mat->NormalSrvHeapIndex > -1) {
+			//	CD3DX12_GPU_DESCRIPTOR_HANDLE normal(mSrvNormalDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
+			//	normal.Offset(ri->Mat->NormalSrvHeapIndex, mCbvSrvUavDescriptorSize);
+			//	cmdList->SetGraphicsRootDescriptorTable(4, normal);
+			//}
 
-			D3D12_GPU_VIRTUAL_ADDRESS matCBAddress = matCB->GetGPUVirtualAddress() + ri->Mat->MatCBIndex * matCBByteSize;
-			cmdList->SetGraphicsRootConstantBufferView(3, matCBAddress);
+			//D3D12_GPU_VIRTUAL_ADDRESS matCBAddress = matCB->GetGPUVirtualAddress() + ri->Mat->MatCBIndex * matCBByteSize;
+			//cmdList->SetGraphicsRootConstantBufferView(3, matCBAddress);
+
+			CD3DX12_GPU_DESCRIPTOR_HANDLE mat(mCbvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
+			UINT matcbvIndex = mCurrFrameResourceIndex * (UINT)(mAllRitems.size() + mMaterials.size()) + (UINT)mAllRitems.size() + (UINT)ri->Mat->MatCBIndex;
+			mat.Offset(matcbvIndex, mCbvSrvUavDescriptorSize);
+			cmdList->SetGraphicsRootDescriptorTable(2, mat);
 		}
-		*/
-		//tex.Offset(ri->Mat->DiffuseSrvHeapIndex, mCbvSrvDescriptorSize);
-		/*D3D12_GPU_VIRTUAL_ADDRESS objCBAddress = objectCB->GetGPUVirtualAddress() + ri->ObjCBIndex*objCBByteSize;*/
-
-		CD3DX12_GPU_DESCRIPTOR_HANDLE tex(mCbvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
-		tex.Offset(mTexSrvOffset + i, mCbvSrvDescriptorSize);
-		cmdList->SetGraphicsRootDescriptorTable(0, tex);
 
 		CD3DX12_GPU_DESCRIPTOR_HANDLE obj(mCbvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
-		UINT cbvIndex = mCurrFrameResourceIndex * (UINT)mAllRitems.size() + ri->ObjCBIndex;
+		UINT cbvIndex = mCurrFrameResourceIndex * (UINT)(mAllRitems.size() + mMaterials.size()) + ri->ObjCBIndex;
 		obj.Offset(cbvIndex, mCbvSrvUavDescriptorSize);
-		cmdList->SetGraphicsRootDescriptorTable(1, obj);
+		cmdList->SetGraphicsRootDescriptorTable(0, obj);
 
-		//cmdList->SetGraphicsRootConstantBufferView(1, objCBAddress);
-
-		//D3D12_GPU_VIRTUAL_ADDRESS objCBAddress = objectCB->GetGPUVirtualAddress() + ri->ObjCBIndex * objCBByteSize;
-
-		//cmdList->SetGraphicsRootConstantBufferView(1, objCBAddress);
 	
 		cmdList->DrawIndexedInstanced(ri->IndexCount, 1, ri->StartIndexLocation, ri->BaseVertexLocation, 0);
 	}
