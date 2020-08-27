@@ -5,6 +5,7 @@
 #include "d3dApp.h"
 #include "FrameResource.h"
 #include "EngineConfig.h"
+#include "Camera.h"
 
 using Microsoft::WRL::ComPtr;
 using namespace DirectX;
@@ -47,6 +48,7 @@ private:
 	void BuildConstantBuffers();
 	void BuileSourceBuffers();
 	void BuildShadersAndInputLayout();
+	void BuildModel();
 	void BuildBoxGeometry();
 	void BuildShpere();
 	void BuildRoomGeometry();
@@ -103,6 +105,8 @@ private:
 	XMFLOAT4X4 mWorld = MathHelper::Identity4x4();
 	XMFLOAT4X4 mView = MathHelper::Identity4x4();
 	XMFLOAT4X4 mProj = MathHelper::Identity4x4();
+
+	Camera mCamera;
 
 	float mSunTheta = 1.25f * XM_PI;
 	float mSunPhi = XM_PIDIV4;

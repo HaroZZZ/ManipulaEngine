@@ -1,5 +1,6 @@
 #include "GameProgress.h"
 #include "RenderItem.h"
+#include "PlyReader.h"
 
 GameProgress::GameProgress(HINSTANCE hInstance):D3DApp(hInstance)
 {
@@ -21,7 +22,10 @@ bool GameProgress::Initialize()
 	//获取TYPE_CBV_SRV_UAV描述符的大小
 	mCbvSrvDescriptorSize = md3dDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
+	mCamera.SetPosition(0.0f, 2.0f, -15.0f);
+
 	LoadTextures();
+	BuildModel();
 	BuildBoxGeometry();
 	BuildRoomGeometry();
 	BuildMaterials();
@@ -50,9 +54,7 @@ void GameProgress::OnResize()
 {
 	D3DApp::OnResize();
 
-	// The window resized, so update the aspect ratio and recompute the projection matrix.
-	XMMATRIX P = XMMatrixPerspectiveFovLH(0.25f * MathHelper::Pi, AspectRatio(), 1.0f, 1000.0f);
-	XMStoreFloat4x4(&mProj, P);
+	mCamera.SetLens(0.25f * MathHelper::Pi, AspectRatio(), 1.0f, 1000.0f);
 }
 
 void GameProgress::Update(const GameTimer& gt)
@@ -159,24 +161,8 @@ void GameProgress::OnMouseMove(WPARAM btnState, int x, int y)
 		float dx = XMConvertToRadians(0.25f * static_cast<float>(x - mLastMousePos.x));
 		float dy = XMConvertToRadians(0.25f * static_cast<float>(y - mLastMousePos.y));
 
-		// Update angles based on input to orbit camera around box.
-		mTheta += dx;
-		mPhi += dy;
-
-		// Restrict the angle mPhi.
-		mPhi = MathHelper::Clamp(mPhi, 0.1f, MathHelper::Pi - 0.1f);
-	}
-	else if ((btnState & MK_RBUTTON) != 0)
-	{
-		// Make each pixel correspond to 0.005 unit in the scene.
-		float dx = 0.005f * static_cast<float>(x - mLastMousePos.x);
-		float dy = 0.005f * static_cast<float>(y - mLastMousePos.y);
-
-		// Update the camera radius based on input.
-		mRadius += dx - dy;
-
-		// Restrict the radius.
-		mRadius = MathHelper::Clamp(mRadius, 3.0f, 15.0f);
+		mCamera.Pitch(dy);
+		mCamera.RotateY(dx);
 	}
 
 	mLastMousePos.x = x;
@@ -187,35 +173,19 @@ void GameProgress::OnKeyboardInput(const GameTimer& gt)
 {
 	const float dt = gt.DeltaTime();
 
-	if (GetAsyncKeyState(VK_LEFT) & 0x8000) {
-		mSunTheta -= 1.f * dt;
-	}
+	if (GetAsyncKeyState('W') & 0x8000)
+		mCamera.Walk(10.0f * dt);
 
-	if (GetAsyncKeyState(VK_RIGHT) & 0x8000) {
-		mSunTheta += 1.f * dt;
-	}
+	if (GetAsyncKeyState('S') & 0x8000)
+		mCamera.Walk(-10.0f * dt);
 
+	if (GetAsyncKeyState('A') & 0x8000)
+		mCamera.Strafe(-10.0f * dt);
 
-	if (GetAsyncKeyState(VK_UP) & 0x8000) {
-		mSunPhi -= 1.f * dt;
-	}
+	if (GetAsyncKeyState('D') & 0x8000)
+		mCamera.Strafe(10.0f * dt);
 
-	if (GetAsyncKeyState(VK_DOWN) & 0x8000)
-		mSunPhi += 1.f * dt;
-
-	if (GetAsyncKeyState(0x57) & 0x8000) {//w
-		inputPos.z += 5.f * dt;
-	}
-	if (GetAsyncKeyState(0x41) & 0x8000) {//a
-		inputPos.x -= 5.f * dt;
-	}
-	if (GetAsyncKeyState(0x53) & 0x8000) {//s
-		inputPos.z -= 5.f * dt;
-	}
-	if (GetAsyncKeyState(0x44) & 0x8000) {//d
-		inputPos.x += 5.f * dt;
-	}
-	mSunPhi = MathHelper::Clamp(mSunPhi, 0.1f, XM_PIDIV4);
+	mCamera.UpdateViewMatrix();
 }
 
 void GameProgress::UpdateCamera(const GameTimer& gt)
@@ -275,6 +245,8 @@ void GameProgress::UpdateMaterialCBs(const GameTimer& gt)
 			matConstants.DiffuseAlbedo = mat->DiffuseAlbedo;
 			matConstants.FresnelR0 = mat->FresnelR0;
 			matConstants.Roughness = mat->Roughness;
+			matConstants.AmbientStrength = mat->AmbientColor;
+			matConstants.SpecularStrength = mat->SpecularStrength;
 
 			XMStoreFloat4x4(&matConstants.MatTransform, XMMatrixTranspose(matTransform));
 
@@ -288,8 +260,8 @@ void GameProgress::UpdateMaterialCBs(const GameTimer& gt)
 
 void GameProgress::UpdateMainPassCB(const GameTimer& gt)
 {
-	XMMATRIX view = XMLoadFloat4x4(&mView);
-	XMMATRIX proj = XMLoadFloat4x4(&mProj);
+	XMMATRIX view = mCamera.GetView();
+	XMMATRIX proj = mCamera.GetProj();
 
 	XMMATRIX viewProj = XMMatrixMultiply(view, proj);
 	XMMATRIX invView = XMMatrixInverse(&XMMatrixDeterminant(view), view);
@@ -309,11 +281,11 @@ void GameProgress::UpdateMainPassCB(const GameTimer& gt)
 	mMainPassCB.FarZ = 1000.0f;
 	mMainPassCB.TotalTime = gt.TotalTime();
 	mMainPassCB.DeltaTime = gt.DeltaTime();
-	mMainPassCB.AmbientLight = { 0.25f, 0.25f, 0.35f, 1.0f };
+	mMainPassCB.AmbientLight = { 0.8f, 0.8f, 0.8f, 1.0f };
 	XMVECTOR lightDir = -MathHelper::SphericalToCartesian(1.f, mSunTheta, mSunPhi);
 	XMStoreFloat3(&mMainPassCB.Lights[0].Direction, lightDir);
 	//mMainPassCB.Lights[0].Direction = lightDir;
-	mMainPassCB.Lights[0].Strength = { 0.0f, 0.9f, 0.9f };
+	mMainPassCB.Lights[0].Strength = { 0.5f, 0.5f, 0.5f };
 	//mMainPassCB.Lights[1].Direction = { -0.57735f, -0.57735f, 0.57735f };
 	//mMainPassCB.Lights[1].Strength = { 0.5f, 0.5f, 0.5f };
 	//mMainPassCB.Lights[2].Direction = { 0.0f, -0.707f, -0.707f };
@@ -601,6 +573,12 @@ void GameProgress::BuildShadersAndInputLayout()
 	};
 }
 
+void GameProgress::BuildModel()
+{
+	PlyReader ply;
+	ply.ReadFile(L"Assets/dragon_vrip.ply");
+}
+
 void GameProgress::BuildBoxGeometry()
 {
 	GeometryGenerator geoGen;
@@ -818,6 +796,8 @@ void GameProgress::BuildMaterials()
 	red->DiffuseAlbedo = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
 	red->FresnelR0 = XMFLOAT3(0.05f, 0.05f, 0.05f);
 	red->Roughness = 0.2f;
+	red->AmbientColor = XMFLOAT4(1.0f, 0.0f, 0.0f, 1.0f);
+	red->SpecularStrength = XMFLOAT4(1.0f, 0.0f, 0.0f, 1.0f);
 
 	auto green = std::make_unique<Material>();
 	green->Name = "green";
@@ -828,6 +808,8 @@ void GameProgress::BuildMaterials()
 	green->DiffuseAlbedo = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
 	green->FresnelR0 = XMFLOAT3(0.05f, 0.05f, 0.05f);
 	green->Roughness = 0.25f;
+	green->AmbientColor = XMFLOAT4(1.0f, 0.0f, 0.0f, 1.0f);
+	green->SpecularStrength = XMFLOAT4(1.0f, 0.0f, 0.0f, 1.0f);
 
 	auto blue = std::make_unique<Material>();
 	blue->Name = "blue";
@@ -838,6 +820,8 @@ void GameProgress::BuildMaterials()
 	blue->DiffuseAlbedo = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
 	blue->FresnelR0 = XMFLOAT3(0.07f, 0.07f, 0.07f);
 	blue->Roughness = 0.3f;
+	blue->AmbientColor = XMFLOAT4(1.0f, 0.0f, 0.0f, 1.0f);
+	blue->SpecularStrength = XMFLOAT4(1.0f, 0.0f, 0.0f, 1.0f);
 
 	auto write = std::make_unique<Material>();
 	write->Name = "write";
@@ -848,6 +832,8 @@ void GameProgress::BuildMaterials()
 	write->DiffuseAlbedo = XMFLOAT4(1.0f, 1.0f, 1.0f, 0.3f);
 	write->FresnelR0 = XMFLOAT3(0.1f, 0.1f, 0.1f);
 	write->Roughness = 0.5f;
+	write->AmbientColor = XMFLOAT4(1.0f, 0.0f, 0.0f, 1.0f);
+	write->SpecularStrength = XMFLOAT4(1.0f, 0.0f, 0.0f, 1.0f);
 
 	mMaterials["green"] = std::move(green);
 	mMaterials["blue"] = std::move(blue);

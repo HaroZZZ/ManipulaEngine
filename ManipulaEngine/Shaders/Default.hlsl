@@ -62,7 +62,9 @@ cbuffer cbMaterial : register(b2)
 	float4 gBaseColor;
 	float4 gDiffuseAlbedo;
 	float3 gFresnelR0;
+	float gAmbientStrength;
 	float  gRoughness;
+	float gSpecularStrength;
 	float4x4 gMatTransform;
 };
 
